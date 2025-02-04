@@ -1,0 +1,280 @@
+---
+title: "Assignment 2 - Data Transformation, Statistical Inference and Comparisons"
+author: "Shubham Maheshwari"
+date: "2024-10-05"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=5, fig.height=5,
+                      fig.path='Figs/', echo = TRUE)
+
+knitr::opts_knit$set(root.dir = 'C:/PROG8435 Data Analytics/Assignment 2')
+```
+
+```{r}
+#if(!is.null(dev.list())) dev.off()
+#cat("\014") 
+#rm(list=ls())
+options(scipen=9)
+```
+
+```{r}
+
+if(!require(tinytex)){install.packages("tinytex")}
+library("tinytex")
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+```
+
+# 1. Data Transformation and Preperation
+
+## 1. Initial Transformation
+### a. Rename all variables with your initials appended
+```{r}
+getwd()
+df <- read.table("PROG8435-24F-Assign02.txt", 
+                         sep = ",", header = TRUE)
+head(df)
+
+colnames(df) <- paste(colnames(df),"SM",sep = "_")
+head(df)
+
+str(df)
+
+```
+
+### b. Transform character variables to factor variables.
+```{r}
+df$Ren_SM<- as.factor(df$Ren_SM)
+str(df)
+```
+## 2. Outliers
+```{r}
+# We will be checking for any outliers using the boxplot technique and further investigate into it accordingly 
+
+# Running a for loop to generate box plots for numerical values only. 
+for (i in 1:ncol(df))
+{
+  if(is.numeric(df[,i]))
+  {
+    boxplot(df[i], main = names(df)[i],
+            horizontal=TRUE, pch=10)
+  }
+}
+
+```
+Observations from the box plots: 
+
+1. DT: The date ranges from 0 - 60 and detects no anomolity in it 
+
+2. TM ( Time of Day): It shows values that are negative which are anamolous since time cannot be negative, will further 
+                      look into it using the density plot. 
+                      
+3. Temperatues from sensor 1 looks to be in the normal range which can also be seen by the other sensors as well. 
+
+4. No anamolities detected in the fan speeds either. 
+
+```{r}
+# Using density plot to check for values that are below 0 
+
+densityplot(df$TM_SM, main = "Time of Day (hour)", pch=6)
+
+# Checking other variables for fun 
+densityplot(df$S1_T_SM, pch=6)
+densityplot(df$S2_T_SM, pch=6)
+densityplot(df$S3_T_SM, pch=6)
+densityplot(df$FN_SM, pch=6)
+```
+Observation:
+
+It confirms that there are 3 negative values, I will be proceeding to delete them as there can't be no negative values for hours. 
+
+```{r}
+densityplot( ~ df$TM_SM, pch=6)
+nr <- which(df$TM_SM < 0)  #Finds values less than 0 
+df <- df[-c(nr),]
+densityplot( ~ df$TM_SM, pch=6)
+
+```
+
+## 3. Reduce Dimensionality 
+
+### a. Drop any variables that do not contribute any useful analytical information at all.
+
+```{r}
+# Index column doesn't provide us with any usefule analytical information at all so we will be removing it. 
+
+df <- df[-c(1)]
+```
+### b. Apply the Missing Value Filter to remove appropriate columns of data.
+```{r}
+summary(df)
+```
+There are no missing values present in the data. 
+
+### c. Apply the Low Variance Filter to remove appropriate columns of data
+```{r}
+stat.desc(df)
+summary(df)
+```
+All the columns consists of valuable information so there is no need to drop any columns. 
+
+
+### d. Apply the High Correlation Filter to remove appropriate columns of data.
+```{r}
+numeric_cols <- df[,3:11]
+
+cor(numeric_cols,method="spearman")
+```
+From the data above it's clear that the values for light in Sensor 1 and Sensor 2 are highly correlated, so we will be removing one of them. 
+```{r}
+df <- df[-c(6)]
+head(df)
+```
+### e. Based on our discussions in class, what are some specific benefits of reducing the dimensionality of this particular dataset? 
+
+In the current data set I had removed 2 variables out of 12 making the entire memory usgage 16.66% less and hence reducing the response time by the 16.66% and bringing improvement in the computational efficiency. 
+
+
+# Organizing Data 
+
+## 1. Scatter Plots 
+
+### a. Create a histogram for Temperature from Sensor 1.
+
+```{r}
+hist(df$S1_T_SM,
+     col=2,
+     xlab="Temperature Sensor 1 (°C)",
+     main="Histogram of Temperature Sensor 1")
+```
+```{r}
+hist(df$FN_SM,
+     col=3,  
+     xlab="Fan Speed",
+     main="Histogram of Fan Speed")
+```
+
+```{r}
+plot(FN_SM ~ S1_T_SM,
+     data = df,
+     main = "Temperature Sensor 1 vs Fan Speed",
+     xlab = "Temperature Sensor 1 (°C)",
+     ylab = "Fan Speed")
+
+# Add a horizontal line at the mean fan speed
+abline(h = mean(df$FN_SM), col = "red", lty = 2)
+```
+### d. What conclusions, if any, can you draw from the chart?
+The data from the scatter plot shows to be densely populated in the center between 20 - 25 C and fan speed of 1050 - 1150 
+
+It shows No Linear Relationship between the Temperature and the Fan Speeds as there are many points which shows the opposite. Low fan speed and yet a high temperature or vice verca 
+
+
+```{r}
+print("Pearson Correlation")
+round(cor(df$FN_SM, df$S1_T_SM),3)
+```
+I went with Pearson Method as it measures the linear relationship between two continuous variables
+
+Since r is close to 0, then there is no linear relationship between the variables.
+
+REFERENCE: https://datascientest.com/en/pearson-and-spearman-correlations-a-guide-to-understanding-and-applying-correlation-methods
+
+# 3. INFERENCE
+
+## 1. Normality
+
+### a. Create a QQ Normal plot of for Fan Speed.
+```{r}
+# QQ plot for Fan Speed
+qqnorm(df$FN, main = "Plot of Fan Speed")
+qqline(df$FN)
+```
+### b.Conduct a statistical test for normality on Fan Speed.
+
+```{r}
+shapiro.test(df$FN_SM)
+```
+### c. Is Fan Speed normally distributed? What led you to this conclusion?
+QQ Normal shows that the majority of the points lie on the lie but still can not confirm yet however we can say that approximately the Fan Speed in Normally Distributed 
+
+Performing the Shapiro Wilks Test, confirms further, since P value is less than 5% it confirms our suspicion that the Fan speed is not normally distributed 
+
+
+## 2. Statistically Significant Differences
+
+### a. Compare Temperature from Sensor 2 between ‘New’ and ‘Old’ rooms in your dataset using a suitable hypothesis test.
+
+```{r}
+# Performing Normality Tests 
+
+qqnorm(df$S2_T_SM)
+qqline(df$S2_T_SM)
+
+shapiro.test(df$S2_T_SM)
+```
+
+```{r}
+# Performing the T-Test since it matches the assumptions 
+
+t.test(S2_T_SM ~ Ren_SM, data = df, var.equal = TRUE)
+```
+### b. Explain why you chose the test you did.
+I chose to go with t-test for couple of reasons:
+1. We have a continuous data so had to compare the means of it . 
+
+2. Since two groups are being compared and the data is normally distributed which meets all the assumptions for T-Test to be performed. 
+
+
+
+### c. Do you have strong evidence that Temperature from Sensor 2 is different between new and old rooms?
+
+Yes, the p value is significantly less than 5% that clearly indicates the difference of temperature between the two rooms. 
+
+
+
+
+
+## 3. Multiple Statistical Differences
+
+### a. Determine if Temperature from Sensor 1 varies by Room Number using ANOVA (statistical) and a sequence of boxplots (graphical).
+```{r}
+summary(aov(S1_T_SM ~ Room_SM, data=df))
+print(" ")
+
+boxplot(S1_T_SM ~ Room_SM, data=df,
+        main="Temperature from Sensor 1 by Room",
+        xlab = "Room", 
+        ylab = "Temperature (°C)",
+        range=0)
+
+```
+Conclusion: 
+A Significant p-value less than 0.05 suggests that temperatures varies across the different rooms. 
+Boxplot further confirms visually the difference in temperatures across the rooms. 
+
+
+
+
+### b. Determine if Temperature from Sensor 3 varies by Room Number using ANOVA (statistical) and a sequence of boxplots (graphical).
+```{r}
+summary(aov(S3_T_SM ~ Room_SM, data=df))
+print(" ")
+
+boxplot(S3_T_SM ~ Room_SM, data=df,
+        main="Temperature from Sensor 3 by Room",
+        xlab = "Room", 
+        ylab = "Temperature (°C)",
+        range=0)
+```
+Conclusion: 
+A Significant p-value= 0.977 is greater than 0.05 suggests that temperatures are similar across the different rooms. 
+Box plot further confirms visually the similarity in temperatures across the rooms. 
+
+
