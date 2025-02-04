@@ -1,0 +1,221 @@
+---
+title: "Assignment 3 - Unsupervised Learning: K-Means Clustering"
+author: "Shubham Maheshwari"
+date: "2024-10-14"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/PROG8435 Data Analytics/Assignment 3')
+
+```
+
+## 1. Data Transformation and Descriptive Analysis
+
+### 1. Rename all variables with your initials appended (just as was done in assignment 1)
+```{r}
+getwd()
+df <- read.table("PROG8435-24F-Assign03.txt", sep=",", header=TRUE)
+df <- as.data.frame(df)
+
+colnames(df) <- paste(colnames(df),"SM",sep = "_")
+
+head(df)
+str(df)
+```
+### 2. Create graphical summaries of the data (as demonstrated in class: boxplots or histograms) and comment on any observations you make.
+```{r}
+par(mfrow=c(2,2))
+
+for (i in 1:ncol(df)) {
+  if (is.numeric(df[,i])) {
+      boxplot(df[i], main=names(df)[i],
+              horizontal=TRUE, pch=10)
+  }
+}
+
+par(mfrow=c(1,1))
+```
+All the boxplots are clean without an outliers. 
+
+
+### 3.Standardize all of the variables using either of the two functions demonstrated in class. Describe why you chose the method you did.
+```{r}
+sta01 <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+I chose the min-max function because there are no outliers in the dataset. 
+
+```{r}
+df$Age_Std_SM <- sta01(df$Age_SM)
+df$BP_Std_SM <- sta01(df$BP_SM)
+df$Sq_Std_SM <- sta01(df$Sq_SM)
+df$DL_Std_SM <- sta01(df$DL_SM)
+df$PU_Std_SM <- sta01(df$PU_SM)
+
+head(df)
+```
+## Clustering
+
+### 1. Create segmentation/cluster schemes for k=2,3,4,5,6,7.
+
+```{r}
+maxk <- 7
+nk <- c(2:maxk)
+wss <- rep(0,maxk-1)
+
+```
+
+
+```{r}
+k=6
+
+Clstr <- kmeans(df[,c("Age_Std_SM", "BP_Std_SM")], iter.max=10, centers=k, nstart=10)
+Clstr
+
+df$cluster <- factor(Clstr$cluster)   
+head(df)
+
+centers <- data.frame(cluster=factor(1:k), Clstr$centers)
+
+
+wss[k-1] <- Clstr$tot.withinss 
+```
+
+### 2. Create the WSS plots as demonstrated in class and select a suitable k value based on the “elbow”. [NOTE – Use the code that I provided to do this. Using other functions will yield different results.]
+
+```{r}
+for (k in nk) {
+    Clstr <- kmeans(df[, c("Age_Std_SM", "BP_Std_SM")], centers = k, nstart = 10)
+    wss[k - 1] <- Clstr$tot.withinss
+}
+
+plot(2:maxk, wss,
+     type="b", pch = 19, frame = FALSE,
+     main="Elbow Chart for Clusters",
+     xlab="Values of K",
+     ylab="Total Within-Clusters SS",
+     ylim=c(0,max(wss)))
+```
+I'm choosing the elbow to be at K=4 since visible drastic change in the data points occur after that particular point. 
+
+
+## Evaluation of Clusters
+
+### 1. Based on the “k” chosen above, create a scatter plot showing the clusters and colour-coded datapoints for each of “k-1”, “k”, “k+1”. For example, if you think the “elbow” is at k=5 create the charts for k=4, k=5 and k=6
+```{r}
+
+# (k-1)
+
+k=3
+Clstr<- kmeans(df[,c(6:7)], iter.max=10, centers=k, nstart=10)
+Clstr
+
+df$cluster <- factor(Clstr$cluster)   # Adding Cluster tags to variables
+head(df)
+
+centers <- data.frame(cluster=factor(1:k), Clstr$centers)
+
+```
+
+```{r}
+plot(df$Age_Std_SM, df$BP_Std_SM,
+     col=df$cluster, pch=as.numeric(df$cluster))
+
+```
+```{r}
+# k 
+k=4
+Clstr<- kmeans(df[,c(6:7)], iter.max=10, centers=k, nstart=10)
+Clstr
+
+df$cluster <- factor(Clstr$cluster)   # Adding Cluster tags to variables
+head(df)
+
+centers <- data.frame(cluster=factor(1:k), Clstr$centers)
+
+```
+
+```{r}
+plot(df$Age_Std_SM, df$BP_Std_SM,
+     col=df$cluster, pch=as.numeric(df$cluster))
+
+```
+```{r}
+```
+
+
+```{r}
+# (k+1)
+k=5
+Clstr<- kmeans(df[,c(6:7)], iter.max=10, centers=k, nstart=10)
+Clstr
+
+df$cluster <- factor(Clstr$cluster)   # Adding Cluster tags to variables
+head(df)
+
+centers <- data.frame(cluster=factor(1:k), Clstr$centers)
+```
+
+```{r}
+plot(df$Age_Std_SM, df$BP_Std_SM,
+     col=df$cluster, pch=as.numeric(df$cluster))
+
+```
+
+
+### 2.Based on the WSS plot (3.2) and the charts (4.1) choose one set of clusters that best describes the data.
+```{r}
+k=4
+Clstr<- kmeans(df[,c(6:7)], iter.max=10, centers=k, nstart=10)
+Clstr
+
+df$cluster <- factor(Clstr$cluster)   # Adding Cluster tags to variables
+head(df)
+
+centers <- data.frame(cluster=factor(1:k), Clstr$centers)
+
+```
+```{r}
+plot(df$Age_Std_SM, df$BP_Std_SM,
+     col=df$cluster, pch=as.numeric(df$cluster))
+
+```
+This set best describes the data as there were couple of significances visible in other clusters at different k points, 
+The lowermost red cluster were together in k=3 and they seem two different clusters all together as shown in this cluster via blue cluster and green cluster. 
+
+while in k=5, there were quite many overlapping of data points seem in red and black clusters and the red cluster in k=4 seems to give a good representation of the data 
+
+### 3. Create summary tables for the segmentation/clustering scheme (selected in step 4.2).
+```{r}
+SummClusters <- aggregate(cbind(Age_SM, BP_SM, Sq_SM,DL_SM,PU_SM) ~ cluster,
+                          df, FUN=function(x) round(mean(x), 0))
+SummClusters
+```
+
+### 4. Create suitable descriptive names for each cluster.
+
+Cluster 1 -  Higest Strength
+Cluster 2 -  Oldest with Moderate Strength
+Cluster 3 -  Least Strength
+Cluster 4 -  Youngest 
+
+### 5. Suggest possible uses for this clustering scheme.
+
+1. Fitness Programs:
+
+Tailored workouts: The clusters could be used to design fitness programs that are specifically tailored to the individual's age and strength level. For example, younger individuals with high strength might benefit from more challenging workouts, while older individuals with lower strength might need more gradual progression.
+
+2. Medical Research and Insights:
+
+The scheme could help identify individuals who may be at risk for muscle loss or other age-related health issues, allowing for targeted interventions to improve their overall health and fitness.
+
+It can also be used to identify populations that may be at higher risk for certain health conditions related to age and strength, such as osteoporosis or cardiovascular disease as seen in the cluster 3. 
+
+3. Marketing: 
+
+The scheme could also be benefited by identifying specific market segments for fitness products or equipment, such as age-appropriate strength training equipment or supplements.
+

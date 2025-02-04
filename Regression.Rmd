@@ -1,0 +1,366 @@
+---
+title: "Assignment 4"
+author: "Shubham Maheshwari ID- 8894405"
+date: "2024-11-18"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+knitr::opts_knit$set(root.dir = 'C:/PROG8435 Data Analytics/Assignment 4 ')
+getwd()
+
+cat("\014") 
+if (!is.null(dev.list())) dev.off()
+
+rm(list = ls())
+options(scipen = 9)
+
+#If the library is not already downloaded, download it
+if (!requireNamespace("knitr")) {install.packages("knitr")}
+library(knitr)
+
+if (!requireNamespace("readxl")) {install.packages("readxl")}
+library(readxl)
+
+if (!requireNamespace("pastecs")) {install.packages("pastecs")}
+library(pastecs)
+
+if (!requireNamespace("lattice")) {install.packages("lattice")}
+library(lattice)
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+```
+
+
+# 1 Preliminary and Exploratory
+```{r}
+df <- read.table("PROG8435-24F-Assign04.txt", sep = ",", header = TRUE )
+
+df <- as.data.frame(df)
+head(df)
+
+# Renaming all vairables with "SM" 
+colnames(df) <- paste(colnames(df), "SM", sep = "_")
+head(df)
+
+cat("\nStructure of the Dataframe:\n")
+str(df)
+
+
+# Converting to factor 
+df$City_SM <- as.factor(df$City_SM)
+df$Comp_SM<- as.factor(df$Comp_SM)
+
+
+kable(summary(df))
+
+```
+From the summary, there are some observations that are noteworthy. 
+Prc_SM has a min of -218, which could be an error as prices can not be negative 
+Sqft_SM (square feet) shows very low minimum value as well, indicates data error as well. 
+
+
+## Exploratory 
+```{r}
+# Boxplots 
+par(mfrow=c(1,1))
+for (i in 1:ncol(df)) {
+    boxplot(df[i], main=names(df)[i],
+            horizontal=TRUE, pch=20,col=5)
+}
+par(mfrow=c(1,1))
+
+#Histograms 
+for (i in 1:ncol(df)) {
+  if (is.numeric(df[,i])) {
+    hist(df[,i], main=colnames(df)[i],
+         xlab=colnames(df)[i],col=4)
+  }
+}
+
+```
+Boxplot of prices gave me a conviction and Histogram of Square feet made it clear of some data less than 500. 
+Prices can not be negative as confirmed by the box plot and 
+Square feet of an appartment can not be less than 500sqft, so we will be removing these values.   
+
+```{r}
+# Clearing the values 
+df <- df[df$Prc_SM > 0, ]
+
+df <- df[df$Sqft_SM > 500, ]
+
+par(mfrow=c(2,2))
+for (i in 1:ncol(df)) {
+  if (is.numeric(df[,i])) {
+    boxplot(df[i], main=names(df)[i],
+            horizontal=TRUE, pch=20, col=5)
+  }
+}
+par(mfrow=c(1,1))
+
+```
+## 3. Rent Price Analysis between two companies 
+
+```{r}
+#Shapiro test
+shapiro.test(df$Prc_SM)
+
+#QQ Normal 
+qqnorm(df$Prc_SM, main="QQ Plot for Rent Prices", pch=20)
+qqline(df$Prc_SM)
+
+# Variance F-Test
+var.test(Prc_SM ~ Comp_SM, data=df)
+```
+From the shapiro test, p -value is less than 0.05 and the QQ plot does not show normality either, we can reject the null hypthosis 
+meaning that the data do not follow a normal distribution and hence can not use the T-test. 
+
+We will go ahead with the Wilcox Test. 
+
+```{r}
+#Wilcoxon test
+wilcox.test(Prc_SM ~ Comp_SM, data=df)
+
+```
+Conclusion: 
+Since the p-value > 0.05 we fail to reject the null hypothesis and 
+can conclude that there is no evidence that shows rent prices differing from each other. 
+
+## 4. Training and Testing 
+
+```{r}
+# Find the number of rows of data
+n.row <- nrow(df)
+
+# Choose sampling rate
+sr <- 0.65
+
+# Last 4 digits of Student Number 
+set.seed(4405)
+
+#Choose the rows for the training sample
+training.rows <- sample(1:n.row, sr*n.row, replace=FALSE)
+
+#Assign to the training sample
+train <- subset(df[training.rows,])
+
+# Assign the balance to the Test Sample
+test <- subset(df[-c(training.rows),])
+
+```
+
+```{r}
+#Summary
+summary(train)
+summary(test)
+
+# Comparing means of each set 
+round(mean(train$Prc_SM),6)
+round(mean(test$Prc_SM),6)
+
+# Using Wilcox for comparisson 
+wilcox.test(train$Prc_SM, test$Prc_SM)
+```
+Conclusion: From the summary I could not find any evidence of dissimilarities which was further confirmed from Wilcox Test which 
+showed p value= 0.4484 rejecting the null hypothesis. 
+
+## 2. Simple Linear Regression
+
+### 1. Correlations
+
+```{r}
+# Numerical correlation
+train_cor <- cor(train[sapply(train, is.numeric)], method="spearman")
+round(train_cor, 2)
+
+# Graphical Correlation
+corrgram(train, order=TRUE, lower.panel=panel.shade,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlation plot of training data")
+```
+Conclusions: 
+floor_sm (Floor) and totfloor_sm (Total Floor) show a strong positive correlation which is obvious that higher floor number corresponds to appartment having more total floors. 
+
+There are good observations in accordance to the prices 
+Appartment Prices tend to increase and have moderate positive correlation (0.39) with Bathroom, which states more bathroom leads to higher prices 
+
+While having more Bedrooms leads to lower prices and has negative correlation (-0.36) between price and bedroom, which is quite common in real estates these days. 
+
+and it also decreases with the distance as seen between prc and dist (-0.29)
+
+### 2. Simple linear regression model
+```{r}
+# Creating linear model for Price and Distance 
+mod.Dist <- lm(Prc_SM ~ Dist_SM, data = train)
+
+# Creating plot with regression line
+plot(Prc_SM ~ Dist_SM, data = train, pch = 1,
+     main = "Scatter plot of Rrice and Distance",
+     xlab = "Distance ",
+     ylab = "Monthly Rent")
+abline(mod.Dist, col = 2, lwd = 1)
+```
+There is a an obvious negative relationship between the rent and the distance as shown the by the downward regression line. Shows high concentration of properites clustered withing the 0-5km distance with majority of rent prices from 1000 - 4000 
+
+
+### SLR for Price and Square Ft
+
+```{r}
+# Creating the model
+mod.Sqft <- lm(Prc_SM ~ Sqft_SM, data = train)
+
+# Creating the plot with regression line
+plot(Prc_SM ~ Sqft_SM, data = train, pch = 1,
+     main = "Scatter Plot for Price and Square Ft",
+     xlab = "Size of apartment (sqft)",
+     ylab = "Monthly Rent")
+abline(mod.Sqft, col = 2, lwd = 2)
+```
+Surpisingly there is not so significant rise in trend line in the indicating that the prices has minimal impact as the sqft of an appartment also increase, with a minimal positive correlation (0.29) as seen from the correlation matrix as well. The plots are quite varied throughout the chart with price variation occuring accross all sizes from 500 to 3000 square feet. 
+
+### 4. Comparing the two models
+
+```{r}
+summary(mod.Dist)
+pred.Dist <- predict(mod.Dist, newdata=train)
+RMSE_train_Dist <- sqrt(mean((train$Prc_SM - pred.Dist)^2))
+RMSE_train_Dist
+
+summary(mod.Sqft)
+pred.Sqft <- predict(mod.Sqft, newdata=train)
+RMSE_train_Sqft <- sqrt(mean((train$Prc_SM - pred.Sqft)^2))
+RMSE_train_Sqft
+```
+
+The first model is better than the second model as the Adjusted R-Squared is higher than that of the second model, which is out clear indicator. 
+
+```{r}
+# Comparing for Test Models 
+pred.Dist_test <- predict(mod.Dist, newdata=test)
+RMSE_test_Dist <- sqrt(mean((test$Prc_SM - pred.Dist_test)^2))
+RMSE_test_Dist
+
+pred.Sqft_tst <- predict(mod.Sqft, newdata=test)
+RMSE_test_Sqft <- sqrt(mean((test$Prc_SM - pred.Sqft_tst)^2))
+RMSE_test_Sqft
+```
+Model 1 has lower RMSE than the model 2 in the testing set so Model 1 is better.
+
+Hence Model 1 is better in both Training and Testing set. 
+
+# 3. Model development - Multivariate
+
+```{r}
+# Full Model
+full.model <- lm(Prc_SM ~ . , data = train, na.action=na.omit)
+
+# Evaluating model on both the  data
+summary(full.model)
+full.pred <- predict(full.model, newdata=train)
+RMSE_train_full <- sqrt(mean((train$Prc_SM - full.pred)^2))
+RMSE_train_full
+
+full.pred_test <- predict(full.model, newdata = test)
+RMSE_test_full <- sqrt(mean((test$Prc_SM - full.pred_test)^2))
+RMSE_test_full
+```
+Comment on the main measures from the full model. 
+
+First the residuals shows median of 12.16 indicating some skewness in the model
+
+P value of the coefficients is less than 0.05, with 8/9 variables aligning with intercept with p <0.05 and hence validating the prediction
+
+We have Adjusted R-Square = 0.5574
+
+F-stat with  p-value (< 2.2e-16) which passes the hypothesis and model is significant 
+
+RMSE Train: 600.08
+RMSE Test: 656.98
+
+```{r}
+# Backward Selection Model
+back.model <- step(full.model, direction="backward", details=TRUE)
+
+# Evaluating the model
+summary(back.model)
+
+back.pred <- predict(back.model, newdata=train)
+RMSE_train_back <- sqrt(mean((train$Prc_SM - back.pred)^2))
+RMSE_train_back
+
+back.pred_tst <- predict(back.model, newdata = test)
+RMSE_test_back <- sqrt(mean((test$Prc_SM - back.pred_tst)^2))
+RMSE_test_back
+```
+Comment on the main measures from the backward model. 
+
+First the residuals shows median of 13.25 indicating some skewness in the model
+
+P value of the coefficients is less than 0.05, with 8/8 that is all variables aligning with intercept with p <0.05 and hence validating the prediction
+
+We have Adjusted R-Square = 0.5578
+
+F-stat with  p-value (< 2.2e-16) which passes the hypothesis and model is significant 
+
+RMSE Train: 620.9924
+RMSE Test: 613.7087
+
+Conclusion: 
+Backwards Model is slightly better than the full model as Adjusted R-Squared is slightly higher (0.5578 vs 0.5574) with all vairables satisfying the intercept prediction. 
+
+
+# 4. Model evaluation
+
+```{r}
+#Full Model 
+plot(full.model)
+```
+Full Model: 
+
+Residuals vs Fitted 
+- The points are scattered throughout the plot and no visible patterns. Satisfying the assumptions of linearity which can be proved further by looking at the scale-location plot.
+
+QQ plot:
+Data points are following the line and only couple of points off from it so we can assume and suggest that the residuals are almost normally distributed.
+
+Residuals vs Leverage 
+Its crowded at on major spot with only few points going furhter, there are few points with high leverage but with no significant influence on it. 
+
+```{r}
+# Backwards Model 
+plot(back.model)
+```
+Evaluation of Backward Model: 
+
+The residuals vs fitted plot shows a relatively random scatter of points around zero. 
+
+QQ Normal PLot shows data points to be distributed on the line as well excpet for three data points which we can pass and assume that is also normally distributed.
+
+There are not significant pattern observed the in the scatter plots so can conclude that it satisifies the assumptions of linearity 
+
+Residuals v Leverage plot :
+The trend line is relatively horizontal indicating a good lineraity, no points appear to exceed the Cook's distance. There are couple of high leverage points (146 and 411) but without any influcence. Most of the data is clustered at particular point near 0.01 with only few points going outside. 
+
+Verifying the normaity 
+```{r}
+full.res <- residuals(full.model)
+back.res <- residuals(back.model)
+
+shapiro.test(full.res)
+shapiro.test(back.res)
+```
+We can hence conclude that both models are normal.
+
+#5. Final recommendation
+
+After Analyzing both the models we can say that the Backwards Model that is the model 2 slightly better than the model 1 since it has lower RMSE value and slightly higher Adjusted R-squared with all variables satisfying the intercept prediction of p < 0.05
+
+
+# References
+1. PROG8435 – Data Analysis,Lecture 8,9 Prof. David Marsh
+All of my code was used from the sample code and lecture notes provided. 
+```
+

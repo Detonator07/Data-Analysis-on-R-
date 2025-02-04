@@ -1,0 +1,487 @@
+---
+title: "Assignment 05"
+author: "Shubham Maheshwari - 8894405"
+date: "2024-12-01"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+cat("\014") 
+if (!is.null(dev.list())) dev.off()
+rm(list = ls())
+options(scipen = 9)
+
+#If the library is not already downloaded, download it
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+
+if(!require(tinytex)){install.packages("tinytex")}
+library("tinytex")
+
+if(!require(ggplot2)){install.packages("ggplot2")}
+library("ggplot2")
+
+if(!require(polycor)){install.packages("polycor")}
+library("polycor")
+
+if (!require(klaR)) {install.packages("klaR")}
+library(klaR)
+
+if(!require(partykit)){install.packages("partykit")}
+library(partykit)
+```
+
+# 1. Preliminary Data Preparation
+```{r}
+setwd('C:/PROG8435 Data Analytics/Assignment 5')
+
+df <- read.table("PROG8435-24F-Assign05.txt", sep = ",", header = TRUE)
+
+df <- as.data.frame(df)
+head(df)
+
+# Rename All Variables to SM 
+colnames(df) <- paste(colnames(df), "SM", sep = "_")
+head(df)
+
+df <- as.data.frame(unclass(df), stringsAsFactors=TRUE)
+head(df)
+```
+
+```{r}
+# Creating a new variable PC_SM 
+df$PC_SM <- as.factor(ifelse(df$Prc_SM < 2251,"L","H"))
+head(df)
+
+
+# Removing PRC Variable 
+df <- df[,-c(1)]
+head(df)
+```
+```{r}
+summary(df)
+table(df$PC_gp)
+```
+
+# 2. Exploratory Analysis
+
+```{r}
+# Boxplots 
+par(mfrow=c(2,2))
+for (i in 1:ncol(df)) {
+  if (is.numeric(df[,i])) {
+    boxplot(df[i], main=names(df)[i],
+            horizontal=TRUE, pch=10)
+  }
+}
+par(mfrow=c(1,1))
+
+# Barplots for Factor Columns
+par(mfrow=c(2,2))
+
+for(i in 1:ncol(df)) {
+  if(is.factor(df[,i])){
+    ct <- table(df[i])
+    barplot(ct, main=names(df[,i]))
+  }
+}
+
+par(mfrow=c(1,1))
+```
+Observation: 
+There are clear outliers in several numeric variables such as (floor_SM, Sqft_SM, Dist_SM). These might need further investigation to determine their validity apart from that the categorical data seems fairly balanced overall, except for the notable difference in the H and L categories.
+
+```{r}
+hetcor(df$Bed_SM, df$PC_SM)
+
+hetcor(df$floor_SM, df$PC_SM)
+
+hetcor(df$TotFloor_SM, df$PC_SM)
+
+hetcor(df$Bath_SM, df$PC_SM)
+
+hetcor(df$Sqft_SM, df$PC_SM)
+
+hetcor(df$City_SM, df$PC_SM)
+
+hetcor(df$Comp_SM, df$PC_SM)
+
+hetcor(df$Dist_SM, df$PC_SM)
+
+```
+Distance and Price have strong positive correlation (0.2783)
+while Bath and Price have strong negative correlation ( -0.3601)
+
+```{r}
+# Choosing the sampling rate
+sr <- 0.75
+
+
+n.row <- nrow(df)
+
+set.seed(4405)
+
+training.rows <- sample(1:n.row, sr*n.row, replace=FALSE)
+
+train <- subset(df[training.rows,])
+
+test <- subset(df[-c(training.rows),])
+
+summary(train)
+summary(test)
+```
+
+# 3. Model Development
+
+### 1. Full Model
+```{r}
+glm.full <- glm(PC_SM ~ ., family = "binomial", data = train)
+
+# Summarize the model
+summary(glm.full)
+
+# Plot Cook's distance for influential points
+plot(glm.full, which = 4, id.n = 6, main = "Cook's Distance: Full Model")
+
+```
+Observations:
+
+Fisher iterations - 5
+
+AIC - 779.93
+ 
+Residual Deviance - 759.93
+ 
+z-values - 7/10 variables are significant however it fails at the intercept 
+ 
+Parameter Co-Efficients - Some variables have positive correlation such as Bedroom and Distance , while others are negatively correlated. 
+
+There are some influential points but nothing of great significance as they are way under the 0.5 mark. 
+
+### 2. Backward Model 
+```{r}
+# Perform backward selection
+glm.back <- step(glm.full, direction = "backward", trace = TRUE)
+
+# Display the summary of the final model
+summary(glm.back)
+
+# Plot Cook's distance for the backward selection model
+plot(glm.back, which = 4, id.n = 6, main = "Cook's Distance: Backward Model")
+
+
+```
+Observations: 
+
+Fisher iterations - 5
+
+AIC - 778.82
+ 
+Residual Deviance - 762.82
+ 
+z-values - 6/8 variables passes the hypothesis 
+ 
+Parameter Co-Efficients - Bed and Distance are positively correlated, while other variables are not. We could see city Terranova positively correlated as well which will require further investigation. 
+
+### 4. Based on your preceding analysis, recommend which model should be selected and explain why.
+
+From the above analysis we can conclude that the Backward Model is better than the Full Model 
+
+Both the models have no issues fitting the models, as showcased by fischer of 5 
+
+Back model has Lower AIC - 779.82 vs 779.93 
+
+Residual is slightly higher than that of full model, suggesting minimal loss and also due to having less variables which is explanatory 
+
+Removal of non significant values such as totfloor where the full model gave a positive correlation which was not reciprocated by the floor, indicating errors in the model. 
+
+
+# Part- B 
+
+## 1. Logistic Regression - Stepwise 
+
+```{r}
+start_time <- Sys.time()
+step.model <- step(glm.full, direction = "both", trace = TRUE)
+
+end_time <- Sys.time()
+
+Time <- end_time - start_time
+
+summary(step.model)
+
+Time
+```
+```{r}
+# Predict probabilities for training data
+response_tr <- predict(step.model, newdata = train, type = "response")
+
+# Classify predictions based on the threshold of 0.5
+class_tr <- ifelse(response_tr > 0.5, "H", "L")
+
+# Create confusion matrix for training data
+conf_tr <- table(train$PC_SM, class_tr,
+                           dnn = list("Actual", "Predicted"))
+conf_tr
+
+# Calculate accuracy for training data
+accuracy_tr <- (conf_tr[2, 2] + conf_tr[1, 1]) / sum(conf_tr)
+
+# Display rounded accuracy
+round(accuracy_tr, 3)
+
+```
+
+```{r}
+
+# Predict probabilities for testing data
+response_te <- predict(step.model, newdata = test, type = "response")
+
+# Classify predictions based on the threshold of 0.5
+class_te <- ifelse(response_te > 0.5, "H", "L")
+
+# Create confusion matrix for testing data
+conf_te <- table(test$PC_SM, class_te,
+                 dnn = list("Actual", "Predicted"))
+conf_te
+
+# Calculate accuracy for testing data
+accuracy_te <- (conf_te[2, 2] + conf_te[1, 1]) / sum(conf_te)
+
+# Display rounded accuracy
+round(accuracy_te, 3)
+
+```
+
+## 2. Naïve-Bayes Classification
+```{r}
+# Recording the start time
+start_tm <- Sys.time()
+
+# Fit the Naive Bayes model
+nb.mod <- NaiveBayes(PC_SM ~ ., data = train, na.action = na.omit)
+
+# Record end time
+end_tm <- Sys.time()
+
+# Calculate time taken for model fitting
+time_taken <- end_tm - start_tm
+time_taken
+
+```
+
+
+```{r warning=FALSE}
+# Train Data
+pred_NB <- predict(nb.mod, newdata=train)
+
+Conf_NB <- table(Actual=train$PC_SM , Predicted=pred_NB$class)
+Conf_NB
+
+Accuracy <- (Conf_NB[1,1] + Conf_NB[2,2])/sum(Conf_NB)
+
+round(Accuracy,4)
+
+```
+
+```{r warning=FALSE}
+# Test Data
+
+pred_NB <- predict(nb.mod, newdata=test)
+
+Conf_NB <- table(Actual=test$PC_SM , Predicted=pred_NB$class)
+Conf_NB
+
+Accuracy <- (Conf_NB[1,1] + Conf_NB[2,2]/sum(Conf_NB))
+
+round(Accuracy,4)
+
+```
+## 3. Recursive Partitioning Analysis
+```{r}
+start_time <- Sys.time()
+
+RP.mod <- ctree(PC_SM ~ ., data= train)
+
+end_time <- Sys.time()
+  
+Time <- end_time - start_time
+Time
+
+plot(RP.mod, gp=gpar(fontsize=8))
+RP.mod
+
+```
+
+
+```{r}
+# Predict on training data
+pred.RP <- predict(RP.mod, newdata= train)
+
+# Confusion matrix
+Conf_RP <- table(Actual = train$PC_SM, Predicted = pred.RP)
+
+# Print confusion matrix
+Conf_RP
+
+# Calculate accuracy for training data 
+Accuracy <- (Conf_RP[1,1] + Conf_RP[2,2]) / sum(Conf_RP)
+round(Accuracy, 4)
+
+
+```
+
+```{r}
+# Predict on testing data
+pred.RP <- predict(RP.mod, newdata= test)
+
+# Confusion matrix
+Conf_RP <- table(Actual = test$PC_SM, Predicted = pred.RP)
+
+# Print confusion matrix
+Conf_RP
+
+# Calculate accuracy for testing data 
+Accuracy <- (Conf_RP[1,1] + Conf_RP[2,2]) / sum(Conf_RP)
+round(Accuracy, 4)
+
+```
+
+## 4.Neural Network Fitting
+```{r}
+# Install and load the nnet package
+if (!require("nnet")) {
+  install.packages("nnet")
+}
+library("nnet")
+
+# Record start time
+start_tm <- Sys.time()
+
+# Fit the neural network model
+nn.mod <- nnet(
+  PC_SM ~ .,          # Response variable and predictors
+  data = train,       # Dataset
+  size = 4,           # Number of nodes in the hidden layer
+  rang = 0.0001,      # Initial random weights range
+  maxit = 1200,       # Maximum number of iterations
+  trace = FALSE       # Suppress detailed trace output
+)
+
+# Record end time
+end_tm <- Sys.time()
+
+# Calculate time taken for model fitting
+time <- end_tm - start_tm
+time
+
+
+```
+
+```{r}
+ nn.mod
+ summary(nn.mod)
+ nn.mod$wts
+```
+
+
+
+```{r}
+# Predict on training data using the neural network mode
+pred.nn <- predict(nn.mod, newdata = train, type = "class")
+
+# Confusion matrix
+Conf_NN <- table(Actual = train$PC_SM, Predicted = pred.nn)
+
+# Print confusion matrix
+Conf_NN
+
+# Calculate accuracy
+Accuracy <- (Conf_NN[1,1] + Conf_NN[2,2]) / sum(Conf_NN)
+round(Accuracy, 4)
+```
+
+```{r}
+# Predict on testing data using the neural network mode
+pred.nn <- predict(nn.mod, newdata = test, type = "class")
+
+
+Conf_NN <- table(Actual = test$PC_SM, Predicted = pred.nn)
+
+#Print confusion matrix
+Conf_NN
+
+
+Accuracy<- (Conf_NN[1,1] + Conf_NN[2,2]) / sum(Conf_NN)
+round(Accuracy, 4)
+```
+
+
+## 5. Compare All Classifiers
+
+### 1.Which classifier is most accurate?
+
+Logistic Regression :  25.1%
+Naive Bayes : 79.44%
+Recursive Partition: 69.58%
+Neural Network: 63.5%
+
+Naïve Bayes is the most accurate classifier with a testing accuracy of 79.44%, outperforming all other models.
+
+### 2.Which classifier seems most consistent (think train and test)?
+
+We measured consistency by taking the difference between the training and testing accuracy, these were the results: 
+
+Logistic Regression : ~ 1%
+Naive Bayes : ~ 4.2%
+Recursive Partition: ~ 6.7%
+Neural Network: ~ 5.03% 
+
+Naïve Bayes is the most consistent classifier, with only a 4.2% difference between training and testing accuracy. 
+
+### 3.Which classifier is most suitable when processing speed is most important?
+
+Here are the results of different models
+
+Logistic Regression : 0.2357 seconds
+Naive Bayes: 0.0472 seconds
+Recursive Partioning: 0.1705 seconds
+Neural Network: 0.1065 seconds 
+
+Naïve Bayes is the most suitable when processing speed, as it trained in just 0.0472 seconds.  
+
+### 4.Which classifier minimizes false positives?
+
+Here are the results of different models
+
+Logistic Regression : 112
+Naive Bayes : 34
+Recursive Partioning:  44
+Neural Network: 17
+
+Neural Network minimizes false positives, with only 17 false positives in the testing set
+
+
+### 5.In your opinion, which classifier is best overall? Make sure you state why.
+
+In my opinion Naiive Bayes is the best overall classifier for the following reasons:  
+
+Highest Accuracy: 79.44%.
+Most Consistent: Smallest train-test gap (4.2%).
+Fastest Training: 0.0472 seconds, suitable for scenarios requiring quick results.
+Balanced Performance: While it does not minimize false positives, its overall performance (accuracy and consistency) outweighs this limitation.
+
+# References 
+
+All the code was taken from the course material provided by the professor. 
+Would like to mention Tony and Shubham for their help in clearing my doubts.  
+
